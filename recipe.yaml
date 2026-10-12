@@ -1,0 +1,76 @@
+# The one and only model config. run.sh reads THIS — the boxes themselves live in cluster.env (written by
+# setup.sh on first run, machine-specific, never committed).
+# Flag mapping: `name: value` -> --name value | `name: true` -> --name | `name: false` -> omitted.
+# Cluster flags (--nnodes 2 --node-rank N --master-addr/--master-port --tensor-parallel-size 2 --headless on the
+# worker) and the per-box NCCL/gloo interface pins are added by run.sh from cluster.env — never put them here.
+
+server:
+  image: myllmbox/glm53-flash-cluster-vllm:v1   # pinned public tag (digest in README)
+  cpuset: "5-9,15-19"                           # the GB10's 10 fast Cortex-X925 cores
+  model: Intel/GLM-5.3-Flash-W4A16-AutoRound    # ~182G — downloaded into ./models on the first run
+  port: 8000                                    # OpenAI API on the head box
+  host: 127.0.0.1                               # 0.0.0.0 to expose it on the LAN
+  master_port: 25000                            # torch.distributed rendezvous, on the interconnect
+  ib_links: 2                                   # RDMA devices per box: 2 = both halves of the ConnectX-7 (needs an IPv4 on the
+                                                # second interface, else run.sh stays on 1)
+  models_dir: ./models                          # downloaded on the first run, synced to the worker at the same path
+  cache_dir: ./cache                            # compile caches (per box); deletable, the next boot rebuilds
+  patches: ""                                   # optional vLLM patches from patches/, space-separated. See patches/README.md
+
+env:
+  PYTHONUNBUFFERED: "1"
+  TORCH_NCCL_ASYNC_ERROR_HANDLING: "1"
+  TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC: "600"
+  TORCH_CUDA_ARCH_LIST: "12.1a"
+  FLASHINFER_CUDA_ARCH_LIST: "12.1a"
+  TILELANG_CACHE_DIR: /cache/tilelang
+  TRITON_CACHE_DIR: /cache/triton
+  PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True   # long prompts (100k+) need it
+  MBX_LOADER_EMPTY_CACHE: "1"
+  VLLM_MARLIN_USE_ATOMIC_ADD: "1"
+  VLLM_ENABLE_ROCE_ALLREDUCE: "1"               # one-shot RoCE all-reduce up to 2MB, NCCL above
+  B12X_ROCE_CACHE_DIR: /cache/b12x-roce
+  MBX_SKINNY_GEMM: "1"
+  # RoCE v2 over the ConnectX link; interfaces, HCAs and the GID index are set per box by run.sh
+  NCCL_IB_GID_INDEX: "3"                        # fallback only — run.sh probes the live value
+  NCCL_IB_ROCE_VERSION_NUM: "2"
+  NCCL_IB_ADDR_FAMILY: "AF_INET"
+  NCCL_CROSS_NIC: "1"
+  NCCL_IB_MERGE_NICS: "1"                       # dual rail: both ConnectX halves as one NIC
+  NCCL_IB_QPS_PER_CONNECTION: "1"
+  NCCL_IB_SPLIT_DATA_ON_QPS: "0"
+  NCCL_IGNORE_CPU_AFFINITY: "1"
+  NCCL_CUMEM_ENABLE: "0"
+  NCCL_NVLS_ENABLE: "0"
+  NCCL_MAX_NCHANNELS: "4"
+
+vllm:
+  served-model-name: zai-org/GLM-5.3-Flash
+  distributed-executor-backend: mp
+  pipeline-parallel-size: 1
+  gpu-memory-utilization: 0.88                  # the KV pool is sized by kv-cache-memory below, not by this
+  kv-cache-memory: "12000000000"                # 12G per box = 1,184,905 KV tokens (2.96 × a full 400k request)
+                                                # tight on the head after graph capture: if a boot runs out of memory, 9000000000
+  max-model-len: 400000
+  max-num-seqs: 16
+  max-num-batched-tokens: 8192                  # also the image budget: one image up to 8000 tokens (2k×2k ≈ 5.3k)
+  long-prefill-token-threshold: 1024
+  limit-mm-per-prompt: '{"image":8}'
+  load-format: mbx                              # ours: ~1 min load, no page cache during the load
+  compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,10,12,14,15,16,18,20,21,24,28,32,36,40,48,56,64,72,80]}'
+                                                # 16 seats × (4 drafts + 1) = 80
+  enable-prefix-caching: true
+  speculative-config: '{"method":"mtp","num_speculative_tokens":4,"rejection_sample_method":"block","draft_sample_method":"probabilistic"}'
+                                                # up to 4 sampled drafts, depth chosen live (mtp_depth below)
+  reasoning-parser: glm45
+  tool-call-parser: glm47
+  enable-auto-tool-choice: true
+
+# dynamic draft depth → cache/mbx-depth.json on both boxes (edit it to change it without a restart)
+mtp_depth:
+  mode: dynamic                                 # dynamic | off = fixed K=4
+  min: 1                                        # lowest draft depth
+  window: 48                                    # steps of history per decision (8–128)
+  promote: [60, 45]                             # +2 / +1 depth above this % acceptance of the deepest position
+  demote: [25, 15]                              # −1 / −2 depth below this %
+  log: false                                    # true = one log line per decision
