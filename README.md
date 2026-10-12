@@ -78,7 +78,9 @@ curl http://127.0.0.1:8000/v1/chat/completions -H 'Content-Type: application/jso
 }'
 ```
 
-Send `"chat_template_kwargs": {"enable_thinking": false}` to turn thinking off per request. Images: up to 8 per request.
+GLM-5.3-Flash always thinks. Set the depth per request with `"reasoning_effort": "low"` or `"high"` (default: max).
+Do not send `enable_thinking: false`: the model still thinks and the reasoning lands in the answer. Images: up to 8 per
+request.
 
 ## Tuning (recipe.yaml)
 
@@ -90,6 +92,9 @@ Send `"chat_template_kwargs": {"enable_thinking": false}` to turn thinking off p
   always 4. `cache/mbx-depth.json` can be edited while the serve runs.
 - **Images.** `max-num-batched-tokens: 8192` is also the image budget (a 2k × 2k image is ~5.3k tokens).
 - **`host: 127.0.0.1`** keeps the API local; `0.0.0.0` exposes it on the LAN.
+- **Patches.** `patches` (server): optional vLLM patches from [`patches/`](patches/), off by default — `patches: hermes-chat`
+  for the Hermes agent (after [@yume-arasaki](https://github.com/yume-arasaki)'s patch for the Qwen kit). Applied at launch
+  over the image's files; the image itself is unchanged.
 
 ## Memory on a Spark
 

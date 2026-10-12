@@ -1,0 +1,38 @@
+Hermes agent compatibility for GLM-5.3-Flash (after yume-arasaki's hermes-chat patch for the Qwen kit, PR #2).
+- a top-level {"reasoning": {"enabled", "effort"}} object (Hermes custom providers) sets GLM's reasoning_effort:
+  GLM always thinks, so off / none / low / medium -> low, high / xhigh -> high, omitted -> the template's max;
+  an explicit reasoning_effort (request field or chat_template_kwargs) still wins
+- an OMITTED temperature is greedy (0) on the chat path; an explicit temperature passes through
+
+--- a/entrypoints/openai/chat_completion/protocol.py
++++ b/entrypoints/openai/chat_completion/protocol.py
+@@ -584,6 +584,16 @@
+         user_kwargs = self.chat_template_kwargs or {}
+         if self.reasoning_effort is not None and "enable_thinking" not in user_kwargs:
+             extra_kwargs["enable_thinking"] = self.reasoning_effort != "none"
++        # Hermes custom providers send {"reasoning": {"enabled", "effort"}} at the top level (OpenAI extra_body).
++        # GLM-5.3-Flash always thinks; its template takes reasoning_effort low | high (anything else = max).
++        # Off / none / low / medium -> low, high / xhigh -> high. An explicit reasoning_effort or template kwarg wins.
++        reasoning = (self.__pydantic_extra__ or {}).get("reasoning")
++        if self.reasoning_effort is None and "reasoning_effort" not in user_kwargs and isinstance(reasoning, dict):
++            effort = reasoning.get("effort")
++            if reasoning.get("enabled") is False or effort in ("none", "minimal", "low", "medium"):
++                extra_kwargs["reasoning_effort"] = "low"
++            elif effort in ("high", "xhigh"):
++                extra_kwargs["reasoning_effort"] = "high"
+ 
+         return ChatParams(
+             chat_template=self.chat_template or default_template,
+@@ -636,10 +646,9 @@
+         self, max_tokens: int, default_sampling_params: dict
+     ) -> BeamSearchParams:
+         n = self.n if self.n is not None else 1
++        # Hermes omits temperature: greedy unless the client set one. Explicit values pass through.
+         if (temperature := self.temperature) is None:
+-            temperature = default_sampling_params.get(
+-                "temperature", self._DEFAULT_SAMPLING_PARAMS["temperature"]
+-            )
++            temperature = 0.0
+ 
+         return BeamSearchParams(
+             beam_width=n,

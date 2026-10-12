@@ -11,7 +11,9 @@ At launch `run.sh` copies each file a patch touches out of the image, applies th
 worker and mounts it read-only over the image's file on both boxes. The image is never changed; an empty
 `patches` = the stock image. A patch that does not fit the image stops `run.sh` before anything starts.
 
-No patches ship with v1 yet.
+| patch | what it does |
+|---|---|
+| `hermes-chat` | Hermes agent: its `{"reasoning": {…}}` object sets GLM's reasoning effort (GLM always thinks: off / low / medium → low, high / xhigh → high, omitted → max), and an omitted temperature is greedy. After [@yume-arasaki](https://github.com/yume-arasaki)'s hermes-chat patch for the Qwen kit |
 
 ## Adding one
 

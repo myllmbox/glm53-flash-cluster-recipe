@@ -15,7 +15,7 @@ server:
                                                 # second interface, else run.sh stays on 1)
   models_dir: ./models                          # downloaded on the first run, synced to the worker at the same path
   cache_dir: ./cache                            # compile caches (per box); deletable, the next boot rebuilds
-  patches: ""                                   # optional vLLM patches from patches/, space-separated. See patches/README.md
+  patches: ""                                   # optional vLLM patches from patches/, space-separated (e.g. hermes-chat). See patches/README.md
 
 env:
   PYTHONUNBUFFERED: "1"
