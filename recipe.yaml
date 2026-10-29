@@ -9,7 +9,7 @@ server:
   cpuset: "5-9,15-19"                           # the GB10's 10 fast Cortex-X925 cores
   model: nvidia/GLM-5.3-Flash-FP4-Local         # ~166G — downloaded into ./models on the first run
   port: 8000                                    # OpenAI API on the head box
-  host: 127.0.0.1                               # 0.0.0.0 to expose it on the LAN
+  host: 0.0.0.0                                 # the API on the LAN (box IP:port); 127.0.0.1 = this box only
   master_port: 25000                            # torch.distributed rendezvous, on the interconnect
   ib_links: 2                                   # RDMA devices per box: 2 = both halves of the ConnectX-7 (needs an IPv4 on the
                                                 # second interface, else run.sh stays on 1)

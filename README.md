@@ -51,7 +51,7 @@ Decode = 1,000 tokens after the prompt. Hot = the next turn of the same conversa
 - **Draft depth.** MTP with up to 9 sampled drafts, the depth chosen live per request (`MBX_DEPTH_*` in `env`). The ceiling
   `MBX_DEPTH_CEIL` caps the deepest draft by live requests: 1 → 9, 2–3 → 7, 4–7 → 6, 8+ → 5. `MBX_DEPTH_MODE: off` = always 9.
 - **Images.** `max-num-batched-tokens: 8192` is also the image budget (a 2k × 2k image is ~5.3k tokens).
-- **`host: 127.0.0.1`** keeps the API local; `0.0.0.0` exposes it on the LAN.
+- **`host: 0.0.0.0`** serves the API on the LAN (`<box IP>:<port>`); `127.0.0.1` keeps it on the head box only.
 - **Patches.** `patches` (server): optional vLLM patches from [`patches/`](patches/), off by default — `patches: hermes-chat`
   for the Hermes agent (after [@yume-arasaki](https://github.com/yume-arasaki)'s patch for the Qwen kit). Applied at launch
   over the image's files; the image itself is unchanged.
